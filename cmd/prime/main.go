@@ -6,12 +6,15 @@ import (
 	"io"
 	"net"
 	"os"
+	"time"
 
 	"github.com/fxtlabs/primes"
 )
 
 const (
 	serverPort = 8888
+
+	isPrimeMethod = "isPrime"
 )
 
 func main() {
@@ -30,6 +33,7 @@ func startServer() {
 			return
 		}
 
+		conn.SetDeadline(time.Now().Add(time.Second * 120))
 		go handleConnection(conn)
 	}
 }
@@ -44,7 +48,6 @@ func handleConnection(conn net.Conn) {
 	payload := make([]byte, 0, bufSize)
 	buffer := make([]byte, bufSize)
 	for {
-		//TODO: add deadline
 		count, err := conn.Read(buffer)
 
 		if err != nil {
@@ -69,7 +72,7 @@ func handleConnection(conn net.Conn) {
 					return
 				}
 
-				if !(request.Method == "isPrime") {
+				if !(request.Method == isPrimeMethod) {
 					fmt.Printf("method not supported: %s\n", request.Method)
 					conn.Write(payload)
 					return
