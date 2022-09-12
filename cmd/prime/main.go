@@ -83,6 +83,8 @@ func handleConnection(conn net.Conn) {
 					if err != nil {
 						fmt.Printf("failed serializing response %v: %v\n", response, err)
 					}
+					jsonResponse = append(jsonResponse, '\n')
+
 					conn.Write(jsonResponse)
 					payload = make([]byte, 0, bufSize)
 				}

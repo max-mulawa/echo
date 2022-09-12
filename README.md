@@ -2,6 +2,12 @@
 
 https://protohackers.com
 
+## Troubleshooting
+
+```bash
+sudo tcpdump 'port 8888' -w /tmp/dump-external-prime.dmp
+```
+
 ## Echo
 Simple [Echo](https://www.rfc-editor.org/rfc/rfc862.txt) server written in go. 
 Solution to [Problem 0](https://protohackers.com/problem/0)
