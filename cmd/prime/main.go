@@ -15,7 +15,7 @@ import (
 const (
 	serverPort = 8888
 
-	isPrimeMethod = "isPrime"
+	isPrimeMethod string = "isPrime"
 )
 
 func main() {
@@ -41,7 +41,7 @@ func startServer() {
 
 func handleConnection(conn net.Conn) {
 	defer func() {
-		fmt.Print("Closing connection on serer\n")
+		fmt.Print("Closing connection on server\n")
 		conn.Close()
 	}()
 	bufSize := 1024
@@ -72,30 +72,63 @@ func handleConnection(conn net.Conn) {
 				respPayloads := make([][]byte, 0)
 
 				for _, reqPayload := range requestsPayloads {
-					request := &PrimeCheckRequest{}
-					if err := json.Unmarshal(reqPayload, request); err != nil {
-						fmt.Printf("failed to unmarshal payload request: %v\n", err)
-						//conn.Write(payload)
-						//return
+
+					var requestFields map[string]interface{}
+					if err := json.Unmarshal(reqPayload, &requestFields); err != nil {
+						fmt.Printf("failed to unmarshal to a map payload request: %v\n", err)
 						respPayloads = append(respPayloads, reqPayload)
 						continue
 					}
 
-					if !(request.Method == isPrimeMethod) {
-						fmt.Printf("method not supported: %s\n", request.Method)
-						//conn.Write(payload)
-						//return
+					var allowedFields = map[string]bool{
+						"method": true,
+						"number": true,
+					}
+
+					superfluousField := ""
+					for fieldName, _ := range requestFields {
+						if ok := allowedFields[fieldName]; !ok {
+							superfluousField = fieldName
+							break
+						}
+					}
+					if superfluousField != "" {
+						fmt.Printf("failed to unmarshal payload request, extra field present: %s\n", superfluousField)
+						respPayloads = append(respPayloads, reqPayload)
+						continue
+					}
+
+					request := &PrimeCheckRequest{}
+					if err := json.Unmarshal(reqPayload, request); err != nil {
+						fmt.Printf("failed to unmarshal payload request: %v\n", err)
+						respPayloads = append(respPayloads, reqPayload)
+						continue
+					}
+
+					if request.Method == nil {
+						fmt.Print("method field is missing")
+						respPayloads = append(respPayloads, reqPayload)
+						continue
+					}
+
+					if request.Number == nil {
+						fmt.Print("number field is missing")
+						respPayloads = append(respPayloads, reqPayload)
+						continue
+					}
+
+					if !(*request.Method == isPrimeMethod) {
+						fmt.Printf("method not supported: %s\n", *request.Method)
 						respPayloads = append(respPayloads, reqPayload)
 						continue
 					} else {
-						isPrimeNumber := primes.IsPrime(request.Number)
+
+						isPrimeNumber := primes.IsPrime(*request.Number)
 						response := &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: isPrimeNumber}
 						jsonResponse, err := json.Marshal(response)
 						if err != nil {
 							fmt.Printf("failed serializing response %v: %v\n", response, err)
 						}
-						//jsonResponse = append(jsonResponse, '\n')
-						//conn.Write(jsonResponse)
 						respPayloads = append(respPayloads, jsonResponse)
 					}
 				}
@@ -110,8 +143,8 @@ func handleConnection(conn net.Conn) {
 }
 
 type PrimeCheckRequest struct {
-	Method string `json:"method"`
-	Number int    `json:"number"`
+	Method *string `json:"method"`
+	Number *int    `json:"number"`
 }
 
 type PrimeCheckResponse struct {

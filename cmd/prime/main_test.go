@@ -14,13 +14,24 @@ const (
 	primeServer = "localhost"
 )
 
+var (
+	ptrIsPrimeMethod = isPrimeMethod
+
+	compositeNumber         = 123
+	negativeCompositeNumber = -4
+	negativeNonPrimeNumber  = -3
+	primeNumer              = 13
+	oneNumber               = 1
+	zeroNumber              = 0
+)
+
 func TestMain(m *testing.M) {
 	go startServer()
 	m.Run()
 }
 
 func TestPrimeMethodServer(t *testing.T) {
-	req := &PrimeCheckRequest{Method: isPrimeMethod, Number: 17}
+	req := &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: &primeNumer}
 	payload := marshalRequest(t, req)
 
 	expResponse := &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: true}
@@ -91,64 +102,76 @@ func TestPrimeChecks(t *testing.T) {
 	}{
 		{
 			descrition:  "composite number",
-			request:     &PrimeCheckRequest{Method: isPrimeMethod, Number: 123},
+			request:     &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: &compositeNumber},
 			expResponse: &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: false},
 		},
 		{
 			descrition:  "negative composite number",
-			request:     &PrimeCheckRequest{Method: isPrimeMethod, Number: -4},
+			request:     &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: &negativeCompositeNumber},
 			expResponse: &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: false},
 		},
 		{
 			descrition:  "prime number",
-			request:     &PrimeCheckRequest{Method: isPrimeMethod, Number: 13},
+			request:     &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: &primeNumer},
 			expResponse: &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: true},
 		},
 		{
 			descrition:  "negative non-prime number",
-			request:     &PrimeCheckRequest{Method: isPrimeMethod, Number: -3},
+			request:     &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: &negativeNonPrimeNumber},
 			expResponse: &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: false},
 		},
 		{
 			descrition:  "1 as non-prime number",
-			request:     &PrimeCheckRequest{Method: isPrimeMethod, Number: 1},
+			request:     &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: &oneNumber},
 			expResponse: &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: false},
 		},
 		{
 			descrition:  "0 as non-prime number",
-			request:     &PrimeCheckRequest{Method: isPrimeMethod, Number: 0},
+			request:     &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: &zeroNumber},
 			expResponse: &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: false},
 		},
 		//TODO: Any JSON number is a valid number, including floating-point values.
 		// Note that non-integers can not be prime.
-
 	} {
-		reqPayload := marshalRequest(t, tc.request)
-		respPayload := marshalResponse(t, tc.expResponse)
+		t.Run(tc.descrition, func(t *testing.T) {
+			reqPayload := marshalRequest(t, tc.request)
+			respPayload := marshalResponse(t, tc.expResponse)
 
-		conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", primeServer, serverPort))
-		require.NoError(t, err)
+			conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", primeServer, serverPort))
+			require.NoError(t, err)
 
-		_, err = conn.Write(reqPayload)
-		require.NoError(t, err)
+			_, err = conn.Write(reqPayload)
+			require.NoError(t, err)
 
-		buff := make([]byte, 1024)
-		cntRead, err := conn.Read(buff)
-		require.NoError(t, err)
-		require.Equal(t, respPayload, buff[0:cntRead])
+			buff := make([]byte, 1024)
+			cntRead, err := conn.Read(buff)
+			require.NoError(t, err)
+			require.Equal(t, respPayload, buff[0:cntRead])
+		})
 	}
 }
 
 // handle multi request
-// {"number":99198753,"method":"isPrime"}
-// {"number":84263327,"method":"isPrime"}
-// {"method":"isPrime","number":73521363}
+func TestDummyData(t *testing.T) {
+	payload := "\n"
+
+	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", primeServer, serverPort))
+	require.NoError(t, err)
+
+	_, err = conn.Write([]byte(payload))
+	require.NoError(t, err)
+
+	buff := make([]byte, 1024)
+	cntRead, err := conn.Read(buff)
+	require.NoError(t, err)
+	fmt.Printf("read %d bytes", cntRead)
+}
 
 func TestMultiRequest(t *testing.T) {
 	reqPayload := make([]byte, 0)
-	reqPrime := &PrimeCheckRequest{Method: isPrimeMethod, Number: 13}
+	reqPrime := &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: &primeNumer}
 	primeRequestPayload := marshalRequest(t, reqPrime)
-	reqNonPrime := &PrimeCheckRequest{Method: isPrimeMethod, Number: 35170376}
+	reqNonPrime := &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: &compositeNumber}
 	nonPrimeRequestPayload := marshalRequest(t, reqNonPrime)
 	for i := 0; i < 3; i++ {
 		reqPayload = append(reqPayload, primeRequestPayload...)
@@ -185,40 +208,74 @@ func TestPrimeInvalidRequestReplay(t *testing.T) {
 		expResponse []byte
 	}{
 		{
-			descrition: "empty payload is replayed",
+			descrition: "empty payload",
 			request:    []byte("\n"),
 		},
 		{
-			descrition: "empty json payload is replayed",
+			descrition: "empty json payload",
 			request:    []byte("{}\n"),
 		},
 		{
-			descrition: "incorrect method payload is replayed",
+			descrition: "invalid left bracket payload",
+			request:    []byte("{\n"),
+		},
+		{
+			descrition: "invalid right bracket payload",
+			request:    []byte("}\n"),
+		},
+		{
+			descrition: "text payload",
+			request:    []byte("Ala ma kota\n"),
+		},
+		{
+			descrition: "incorrect method payload",
 			request:    []byte("{\"method\":\"isPrime2\",\"number\":7}\n"),
 		},
 		{
-			descrition: "floating number payload is replayed",
+			descrition: "floating number payload",
 			request:    []byte("{\"method\":\"isPrime\",\"number\":7.0}\n"),
 		},
 		{
-			descrition: "invalid json payload is replayed",
+			descrition: "invalid json payload",
 			request:    []byte("{\"method\":\"isPrime\",\"number\":7.0\n"),
 		},
 		{
-			descrition: "number sent as text payload is replayed",
+			descrition: "number sent as text payload",
 			request:    []byte("{\"method\":\"isPrime\",\"number\":\"343453453\"}\n"),
 		},
+		{
+			descrition: "number sent as array ",
+			request:    []byte("{\"method\":\"isPrime\",\"number\":[1621288]}\n"),
+		},
+		{
+			descrition: "number field is missing",
+			request:    []byte("{\"method\":\"isPrime\"}\n"),
+		},
+		{
+			descrition: "method field is missing",
+			request:    []byte("{\"number\":1621288}\n"),
+		},
+		{
+			descrition: "json payload with extra field",
+			request:    []byte("{\"method\":\"isPrime\",\"number\":12343, \"text\":\"abcd efg hji\"}\n"),
+		},
+		{
+			descrition: "big number",
+			request:    []byte("{\"method\":\"isPrime\",\"number\":260940692798368945763214266270993929417123596856669561302575725}\n"),
+		},
 	} {
-		conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", primeServer, serverPort))
-		require.NoError(t, err)
+		t.Run(tc.descrition, func(t *testing.T) {
+			conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", primeServer, serverPort))
+			require.NoError(t, err)
 
-		_, err = conn.Write(tc.request)
-		require.NoError(t, err)
+			_, err = conn.Write(tc.request)
+			require.NoError(t, err)
 
-		buff := make([]byte, 1024)
-		cntRead, err := conn.Read(buff)
-		require.NoError(t, err)
-		require.Equal(t, tc.request, buff[0:cntRead])
+			buff := make([]byte, 1024)
+			cntRead, err := conn.Read(buff)
+			require.NoError(t, err)
+			require.Equal(t, tc.request, buff[0:cntRead])
+		})
 	}
 }
 
