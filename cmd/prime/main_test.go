@@ -139,25 +139,44 @@ func TestPrimeChecks(t *testing.T) {
 	}
 }
 
-//TODO:
 // handle multi request
 // {"number":99198753,"method":"isPrime"}
 // {"number":84263327,"method":"isPrime"}
 // {"method":"isPrime","number":73521363}
-// {"method":"isPrime","number":74683887}
-// {"number":99652937,"method":"isPrime"}
-// {"method":"isPrime","number":89125073}
-// {"number":52593379,"method":"isPrime"}
-// {"method":"isPrime","number":2896170}
-// {"method":"isPrime","number":20211539}
-// {"method":"isPrime","number":10876997}
-// {"number":80035997,"method":"isPrime"}
-// {"method":"isPrime","number":35170376}
-// {"number":81918192,"method":"isPrime"}
-// {"method":"isPrime","number":48176357}
-// {"method":"isPrime","number":66536893}
-// {"number":64228979,"method":"isPrime"}
-// {"method":"isPrime","number":31406846}
+
+func TestMultiRequest(t *testing.T) {
+	reqPayload := make([]byte, 0)
+	reqPrime := &PrimeCheckRequest{Method: isPrimeMethod, Number: 13}
+	primeRequestPayload := marshalRequest(t, reqPrime)
+	reqNonPrime := &PrimeCheckRequest{Method: isPrimeMethod, Number: 35170376}
+	nonPrimeRequestPayload := marshalRequest(t, reqNonPrime)
+	for i := 0; i < 3; i++ {
+		reqPayload = append(reqPayload, primeRequestPayload...)
+		reqPayload = append(reqPayload, nonPrimeRequestPayload...)
+	}
+
+	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", primeServer, serverPort))
+	require.NoError(t, err)
+
+	_, err = conn.Write(reqPayload)
+	require.NoError(t, err)
+
+	buff := make([]byte, 1024)
+	cntRead, err := conn.Read(buff)
+	require.NoError(t, err)
+
+	respPayload := make([]byte, 0)
+	respPrime := &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: true}
+	primeRespPayload := marshalResponse(t, respPrime)
+	respNonPrime := &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: false}
+	nonPrimeRespPayload := marshalResponse(t, respNonPrime)
+	for i := 0; i < 3; i++ {
+		respPayload = append(respPayload, primeRespPayload...)
+		respPayload = append(respPayload, nonPrimeRespPayload...)
+	}
+
+	require.Equal(t, respPayload, buff[0:cntRead])
+}
 
 func TestPrimeInvalidRequestReplay(t *testing.T) {
 	for _, tc := range []struct {
@@ -166,23 +185,27 @@ func TestPrimeInvalidRequestReplay(t *testing.T) {
 		expResponse []byte
 	}{
 		{
-			descrition: "empty payload replayed",
+			descrition: "empty payload is replayed",
+			request:    []byte("\n"),
+		},
+		{
+			descrition: "empty json payload is replayed",
 			request:    []byte("{}\n"),
 		},
 		{
-			descrition: "incorrect method payload replayed",
+			descrition: "incorrect method payload is replayed",
 			request:    []byte("{\"method\":\"isPrime2\",\"number\":7}\n"),
 		},
 		{
-			descrition: "floating number payload replayed",
+			descrition: "floating number payload is replayed",
 			request:    []byte("{\"method\":\"isPrime\",\"number\":7.0}\n"),
 		},
 		{
-			descrition: "invalid json payload replayed",
+			descrition: "invalid json payload is replayed",
 			request:    []byte("{\"method\":\"isPrime\",\"number\":7.0\n"),
 		},
 		{
-			descrition: "invalid number format payload replayed",
+			descrition: "number sent as text payload is replayed",
 			request:    []byte("{\"method\":\"isPrime\",\"number\":\"343453453\"}\n"),
 		},
 	} {

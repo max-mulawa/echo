@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -64,31 +65,45 @@ func handleConnection(conn net.Conn) {
 			payload = append(payload, buffer[0:count]...)
 
 			if payload[len(payload)-1] == byte('\n') {
-				//end of json payload
-				request := &PrimeCheckRequest{}
-				if err := json.Unmarshal(payload, request); err != nil {
-					fmt.Printf("failed to unmarshal payload request: %v\n", err)
-					conn.Write(payload)
-					return
-				}
+				//end of payload
+				requestsPayloads := bytes.Split(payload, []byte("\n"))
+				//remove the last one empty
+				requestsPayloads = requestsPayloads[:(len(requestsPayloads) - 1)]
+				respPayloads := make([][]byte, 0)
 
-				if !(request.Method == isPrimeMethod) {
-					fmt.Printf("method not supported: %s\n", request.Method)
-					conn.Write(payload)
-					return
-				} else {
-					isPrime := primes.IsPrime(request.Number)
-					response := &PrimeCheckResponse{Method: "isPrime", IsPrime: isPrime}
-					jsonResponse, err := json.Marshal(response)
-					if err != nil {
-						fmt.Printf("failed serializing response %v: %v\n", response, err)
+				for _, reqPayload := range requestsPayloads {
+					request := &PrimeCheckRequest{}
+					if err := json.Unmarshal(reqPayload, request); err != nil {
+						fmt.Printf("failed to unmarshal payload request: %v\n", err)
+						//conn.Write(payload)
+						//return
+						respPayloads = append(respPayloads, reqPayload)
+						continue
 					}
-					jsonResponse = append(jsonResponse, '\n')
 
-					conn.Write(jsonResponse)
-					payload = make([]byte, 0, bufSize)
+					if !(request.Method == isPrimeMethod) {
+						fmt.Printf("method not supported: %s\n", request.Method)
+						//conn.Write(payload)
+						//return
+						respPayloads = append(respPayloads, reqPayload)
+						continue
+					} else {
+						isPrimeNumber := primes.IsPrime(request.Number)
+						response := &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: isPrimeNumber}
+						jsonResponse, err := json.Marshal(response)
+						if err != nil {
+							fmt.Printf("failed serializing response %v: %v\n", response, err)
+						}
+						//jsonResponse = append(jsonResponse, '\n')
+						//conn.Write(jsonResponse)
+						respPayloads = append(respPayloads, jsonResponse)
+					}
 				}
+				payload = make([]byte, 0, bufSize)
 
+				respPayload := bytes.Join(respPayloads, []byte{'\n'})
+				respPayload = append(respPayload, byte('\n'))
+				conn.Write(respPayload)
 			}
 		}
 	}
