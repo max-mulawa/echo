@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/fxtlabs/primes"
@@ -18,6 +20,7 @@ const (
 	isPrimeMethod string = "isPrime"
 )
 
+// https://oeis.org/wiki/Nonprime_numbers
 func main() {
 	startServer()
 }
@@ -85,15 +88,27 @@ func handleConnection(conn net.Conn) {
 						"number": true,
 					}
 
-					superfluousField := ""
-					for fieldName, _ := range requestFields {
-						if ok := allowedFields[fieldName]; !ok {
-							superfluousField = fieldName
-							break
+					allowedFieldsCnt := 0
+					for fieldName := range requestFields {
+						if ok := allowedFields[fieldName]; ok {
+							allowedFieldsCnt++
 						}
 					}
-					if superfluousField != "" {
-						fmt.Printf("failed to unmarshal payload request, extra field present: %s\n", superfluousField)
+
+					if len(allowedFields) != allowedFieldsCnt {
+						fmt.Printf("required fields are missing")
+						respPayloads = append(respPayloads, reqPayload)
+						continue
+					}
+
+					switch method := requestFields["method"].(type) {
+					case string:
+						if method != isPrimeMethod {
+							fmt.Printf("method not supported: %s\n", method)
+							respPayloads = append(respPayloads, reqPayload)
+							continue
+						}
+					default:
 						respPayloads = append(respPayloads, reqPayload)
 						continue
 					}
@@ -105,32 +120,24 @@ func handleConnection(conn net.Conn) {
 						continue
 					}
 
-					if request.Method == nil {
-						fmt.Print("method field is missing")
-						respPayloads = append(respPayloads, reqPayload)
-						continue
+					isPrimeNumber := false
+
+					switch request.Number.valueType {
+					case Integer:
+						isPrimeNumber = primes.IsPrime(request.Number.value.(int))
+					case Float:
+						isPrimeNumber = false
+					case BigInt:
+						bigNumber := request.Number.value.(big.Int)
+						isPrimeNumber = bigNumber.ProbablyPrime(0)
 					}
 
-					if request.Number == nil {
-						fmt.Print("number field is missing")
-						respPayloads = append(respPayloads, reqPayload)
-						continue
+					response := &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: isPrimeNumber}
+					jsonResponse, err := json.Marshal(response)
+					if err != nil {
+						fmt.Printf("failed serializing response %v: %v\n", response, err)
 					}
-
-					if !(*request.Method == isPrimeMethod) {
-						fmt.Printf("method not supported: %s\n", *request.Method)
-						respPayloads = append(respPayloads, reqPayload)
-						continue
-					} else {
-
-						isPrimeNumber := primes.IsPrime(*request.Number)
-						response := &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: isPrimeNumber}
-						jsonResponse, err := json.Marshal(response)
-						if err != nil {
-							fmt.Printf("failed serializing response %v: %v\n", response, err)
-						}
-						respPayloads = append(respPayloads, jsonResponse)
-					}
+					respPayloads = append(respPayloads, jsonResponse)
 				}
 				payload = make([]byte, 0, bufSize)
 
@@ -143,9 +150,56 @@ func handleConnection(conn net.Conn) {
 }
 
 type PrimeCheckRequest struct {
-	Method *string `json:"method"`
-	Number *int    `json:"number"`
+	Method *string    `json:"method"`
+	Number NumberInfo `json:"number"`
 }
+
+type NumberInfo struct {
+	value     interface{}
+	valueType ValueType
+}
+
+func (n NumberInfo) MarshalJSON() ([]byte, error) {
+	return []byte(n.value.(string)), nil
+}
+
+func (n *NumberInfo) UnmarshalJSON(b []byte) error {
+	val := string(b)
+	n.value = val
+	valInteger, err := strconv.ParseInt(val, 10, 32)
+	if err == nil {
+		n.valueType = Integer
+		n.value = int(valInteger)
+		return nil
+	} else if numErr, ok := err.(*strconv.NumError); ok {
+		if numErr.Err == strconv.ErrRange {
+			var bigIntVal big.Int
+			_, ok := bigIntVal.SetString(val, 10)
+			if ok {
+				n.valueType = BigInt
+				n.value = bigIntVal
+				return nil
+			}
+		}
+	}
+
+	floatVal, err := strconv.ParseFloat(val, 64)
+	if err == nil {
+		n.valueType = Float
+		n.value = floatVal
+		return nil
+	}
+
+	return fmt.Errorf("failed to convert number to numerical value %s", val)
+}
+
+type ValueType string
+
+var (
+	Integer ValueType = "Integer"
+	Float   ValueType = "Float"
+	BigInt  ValueType = "BitInt"
+)
 
 type PrimeCheckResponse struct {
 	Method  string `json:"method"`

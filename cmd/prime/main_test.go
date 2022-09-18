@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"sync"
 	"testing"
@@ -17,12 +18,12 @@ const (
 var (
 	ptrIsPrimeMethod = isPrimeMethod
 
-	compositeNumber         = 123
-	negativeCompositeNumber = -4
-	negativeNonPrimeNumber  = -3
-	primeNumer              = 13
-	oneNumber               = 1
-	zeroNumber              = 0
+	compositeNumber         int = 123
+	negativeCompositeNumber int = -4
+	negativeNonPrimeNumber  int = -3
+	primeNumer              int = 13
+	oneNumber               int = 1
+	zeroNumber              int = 0
 )
 
 func TestMain(m *testing.M) {
@@ -30,8 +31,15 @@ func TestMain(m *testing.M) {
 	m.Run()
 }
 
+func getIntNumber(n int) NumberInfo {
+	return NumberInfo{
+		value:     fmt.Sprintf("%d", n),
+		valueType: Integer,
+	}
+}
+
 func TestPrimeMethodServer(t *testing.T) {
-	req := &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: &primeNumer}
+	req := &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: getIntNumber(primeNumer)}
 	payload := marshalRequest(t, req)
 
 	expResponse := &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: true}
@@ -102,36 +110,39 @@ func TestPrimeChecks(t *testing.T) {
 	}{
 		{
 			descrition:  "composite number",
-			request:     &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: &compositeNumber},
+			request:     &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: getIntNumber(compositeNumber)},
 			expResponse: &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: false},
 		},
 		{
 			descrition:  "negative composite number",
-			request:     &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: &negativeCompositeNumber},
+			request:     &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: getIntNumber(negativeCompositeNumber)},
 			expResponse: &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: false},
 		},
 		{
 			descrition:  "prime number",
-			request:     &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: &primeNumer},
+			request:     &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: getIntNumber(primeNumer)},
 			expResponse: &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: true},
 		},
 		{
 			descrition:  "negative non-prime number",
-			request:     &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: &negativeNonPrimeNumber},
+			request:     &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: getIntNumber(negativeNonPrimeNumber)},
 			expResponse: &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: false},
 		},
 		{
 			descrition:  "1 as non-prime number",
-			request:     &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: &oneNumber},
+			request:     &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: getIntNumber(oneNumber)},
 			expResponse: &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: false},
 		},
 		{
 			descrition:  "0 as non-prime number",
-			request:     &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: &zeroNumber},
+			request:     &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: getIntNumber(zeroNumber)},
 			expResponse: &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: false},
 		},
-		//TODO: Any JSON number is a valid number, including floating-point values.
-		// Note that non-integers can not be prime.
+		{
+			descrition:  "big int as prime number",
+			request:     &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: NumberInfo{value: "20988936657440586486151264256610222593863921", valueType: BigInt}},
+			expResponse: &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: true},
+		},
 	} {
 		t.Run(tc.descrition, func(t *testing.T) {
 			reqPayload := marshalRequest(t, tc.request)
@@ -151,27 +162,58 @@ func TestPrimeChecks(t *testing.T) {
 	}
 }
 
-// handle multi request
-func TestDummyData(t *testing.T) {
-	payload := "\n"
+func TestNumbersAreNotPrime(t *testing.T) {
+	for _, tc := range []struct {
+		description string
+		number      string
+	}{
+		{
+			description: "value with dot",
+			number:      "7000.33",
+		},
+		{
+			description: "value with comma",
+			number:      "700033.00",
+		},
+		{
+			description: "bigint that is not prime",
+			number:      "260940692798368945763214266270993929417123596856669561302575725",
+		},
+		{
+			description: "max int64 that is not prime",
+			number:      fmt.Sprintf("%d", math.MaxInt64),
+		},
+		{
+			description: "max float 64 that is not prime",
+			number:      fmt.Sprintf("%f", math.MaxFloat64),
+		},
+	} {
+		t.Run(tc.description, func(t *testing.T) {
+			payload := fmt.Sprintf("{\"method\":\"isPrime\",\"number\":%s, \"number2\":\"ok\"}\n", tc.number)
 
-	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", primeServer, serverPort))
-	require.NoError(t, err)
+			conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", primeServer, serverPort))
+			require.NoError(t, err)
 
-	_, err = conn.Write([]byte(payload))
-	require.NoError(t, err)
+			_, err = conn.Write([]byte(payload))
+			require.NoError(t, err)
 
-	buff := make([]byte, 1024)
-	cntRead, err := conn.Read(buff)
-	require.NoError(t, err)
-	fmt.Printf("read %d bytes", cntRead)
+			buff := make([]byte, 1024)
+			cntRead, err := conn.Read(buff)
+			require.NoError(t, err)
+			fmt.Printf("read %d bytes", cntRead)
+			respNonPrime := &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: false}
+			nonPrimeRespPayload := marshalResponse(t, respNonPrime)
+
+			require.Equal(t, nonPrimeRespPayload, buff[:cntRead])
+		})
+	}
 }
 
 func TestMultiRequest(t *testing.T) {
 	reqPayload := make([]byte, 0)
-	reqPrime := &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: &primeNumer}
+	reqPrime := &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: getIntNumber(primeNumer)}
 	primeRequestPayload := marshalRequest(t, reqPrime)
-	reqNonPrime := &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: &compositeNumber}
+	reqNonPrime := &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: getIntNumber(compositeNumber)}
 	nonPrimeRequestPayload := marshalRequest(t, reqNonPrime)
 	for i := 0; i < 3; i++ {
 		reqPayload = append(reqPayload, primeRequestPayload...)
@@ -232,10 +274,6 @@ func TestPrimeInvalidRequestReplay(t *testing.T) {
 			request:    []byte("{\"method\":\"isPrime2\",\"number\":7}\n"),
 		},
 		{
-			descrition: "floating number payload",
-			request:    []byte("{\"method\":\"isPrime\",\"number\":7.0}\n"),
-		},
-		{
 			descrition: "invalid json payload",
 			request:    []byte("{\"method\":\"isPrime\",\"number\":7.0\n"),
 		},
@@ -254,14 +292,6 @@ func TestPrimeInvalidRequestReplay(t *testing.T) {
 		{
 			descrition: "method field is missing",
 			request:    []byte("{\"number\":1621288}\n"),
-		},
-		{
-			descrition: "json payload with extra field",
-			request:    []byte("{\"method\":\"isPrime\",\"number\":12343, \"text\":\"abcd efg hji\"}\n"),
-		},
-		{
-			descrition: "big number",
-			request:    []byte("{\"method\":\"isPrime\",\"number\":260940692798368945763214266270993929417123596856669561302575725}\n"),
 		},
 	} {
 		t.Run(tc.descrition, func(t *testing.T) {
