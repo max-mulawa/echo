@@ -33,8 +33,7 @@ func TestMain(m *testing.M) {
 
 func getIntNumber(n int) NumberInfo {
 	return NumberInfo{
-		value:     fmt.Sprintf("%d", n),
-		valueType: Integer,
+		value: fmt.Sprintf("%d", n),
 	}
 }
 
@@ -140,7 +139,7 @@ func TestPrimeChecks(t *testing.T) {
 		},
 		{
 			descrition:  "big int as prime number",
-			request:     &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: NumberInfo{value: "20988936657440586486151264256610222593863921", valueType: BigInt}},
+			request:     &PrimeCheckRequest{Method: &ptrIsPrimeMethod, Number: NumberInfo{value: "20988936657440586486151264256610222593863921"}},
 			expResponse: &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: true},
 		},
 	} {

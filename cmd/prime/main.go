@@ -122,14 +122,13 @@ func handleConnection(conn net.Conn) {
 
 					isPrimeNumber := false
 
-					switch request.Number.valueType {
-					case Integer:
-						isPrimeNumber = primes.IsPrime(request.Number.value.(int))
-					case Float:
+					switch v := request.Number.value.(type) {
+					case int:
+						isPrimeNumber = primes.IsPrime(v)
+					case float64:
 						isPrimeNumber = false
-					case BigInt:
-						bigNumber := request.Number.value.(big.Int)
-						isPrimeNumber = bigNumber.ProbablyPrime(0)
+					case big.Int:
+						isPrimeNumber = v.ProbablyPrime(0)
 					}
 
 					response := &PrimeCheckResponse{Method: isPrimeMethod, IsPrime: isPrimeNumber}
@@ -155,8 +154,7 @@ type PrimeCheckRequest struct {
 }
 
 type NumberInfo struct {
-	value     interface{}
-	valueType ValueType
+	value interface{}
 }
 
 func (n NumberInfo) MarshalJSON() ([]byte, error) {
@@ -168,7 +166,6 @@ func (n *NumberInfo) UnmarshalJSON(b []byte) error {
 	n.value = val
 	valInteger, err := strconv.ParseInt(val, 10, 32)
 	if err == nil {
-		n.valueType = Integer
 		n.value = int(valInteger)
 		return nil
 	} else if numErr, ok := err.(*strconv.NumError); ok {
@@ -176,7 +173,6 @@ func (n *NumberInfo) UnmarshalJSON(b []byte) error {
 			var bigIntVal big.Int
 			_, ok := bigIntVal.SetString(val, 10)
 			if ok {
-				n.valueType = BigInt
 				n.value = bigIntVal
 				return nil
 			}
@@ -185,21 +181,12 @@ func (n *NumberInfo) UnmarshalJSON(b []byte) error {
 
 	floatVal, err := strconv.ParseFloat(val, 64)
 	if err == nil {
-		n.valueType = Float
 		n.value = floatVal
 		return nil
 	}
 
 	return fmt.Errorf("failed to convert number to numerical value %s", val)
 }
-
-type ValueType string
-
-var (
-	Integer ValueType = "Integer"
-	Float   ValueType = "Float"
-	BigInt  ValueType = "BitInt"
-)
 
 type PrimeCheckResponse struct {
 	Method  string `json:"method"`
