@@ -37,3 +37,12 @@ nc localhost 8888
 {"method":"isPrime","number":17}  #type and enter
 {"method":"isPrime","prime":true}  #returned
 ```
+
+### Means to an End
+Mean price calculator.
+Solution to [Problem 2](https://protohackers.com/problem/2)
+
+```bash
+make build
+./bin/means
+```
