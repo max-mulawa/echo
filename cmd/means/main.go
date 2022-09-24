@@ -1,14 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"os"
-	"sort"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -46,18 +48,24 @@ func handleConnection(conn net.Conn) {
 		conn.Close()
 	}()
 
+	sessionId, err := uuid.NewUUID()
+	if err != nil {
+		fmt.Printf("session id generation failed - %v\n", err)
+		return
+	}
+
 	bufSize := 9
 	buffer := make([]byte, bufSize)
-	session := make(map[uint32]PriceRecord)
+	session := make(map[int32]PriceRecord)
 	//var payload []byte
 	start := 0
 	for {
 		count, err := conn.Read(buffer[start:])
 		if err != nil {
 			if err != io.EOF {
-				fmt.Printf("Read error - %s\n", err)
+				fmt.Printf("%s\tRead error - %s\n", sessionId.String(), err)
 			} else {
-				fmt.Print("Client closed connection\n")
+				fmt.Printf("%s\tClient closed connection\n", sessionId.String())
 			}
 			break
 		}
@@ -72,51 +80,51 @@ func handleConnection(conn net.Conn) {
 		actionBuff := buffer[:bufSize]
 		action, err := getAction(actionBuff)
 		if err != nil {
-			fmt.Printf("failed getting action: %v", err)
+			fmt.Printf("%s\tfailed getting action: %v\n", sessionId.String(), err)
 			continue
 		}
 		switch a := action.(type) {
 		case PriceQuery:
 			mean := calcMean(session, a)
 			response := make([]byte, 4)
-			binary.BigEndian.PutUint32(response, mean)
+			MarshalInt32(mean, response)
+			fmt.Printf("%s\treceived price query: %d %d \tcalculated mean: %d\n", sessionId.String(), a.MinTime, a.MaxTime, mean)
 			writeCnt, err := conn.Write(response)
 			if err != nil {
-				fmt.Printf("failed to write query response: %v", err)
+				fmt.Printf("%s\tfailed to write query response: %v", sessionId.String(), err)
 				return
 			}
 
 			if writeCnt != len(response) {
-				fmt.Printf("failed to write all bytes of response: %v", err)
+				fmt.Printf("%s\tfailed to write all bytes of response: %v\n", sessionId.String(), err)
 				return
 			}
+
 			continue
 		case PriceRecord:
 			session[a.Timestamp] = a
+			fmt.Printf("%s\treceived price record: %d %d\n", sessionId.String(), a.Price, a.Timestamp)
 			continue
 		}
 	}
 }
 
-func calcMean(session map[uint32]PriceRecord, q PriceQuery) uint32 {
-	var mean uint32 = 0
-	var vals []uint32
+func calcMean(session map[int32]PriceRecord, q PriceQuery) int32 {
+	var mean int32 = 0
+	var vals []int64
 	for k, v := range session {
 		if k >= q.MinTime && k <= q.MaxTime {
-			vals = append(vals, v.Price)
+			vals = append(vals, int64(v.Price))
 		}
 	}
 
-	vLen := len(vals)
-
-	sort.Slice(vals, func(i, j int) bool {
-		return vals[i] < vals[j]
-	})
-
-	if vLen%2 == 0 {
-		mean = (vals[vLen/2] + vals[(vLen/2)-1]) / 2
-	} else {
-		mean = vals[vLen/2]
+	vLen := int64(len(vals))
+	if vLen > 0 {
+		meanVal := int64(0)
+		for _, v := range vals {
+			meanVal += v
+		}
+		mean = int32(meanVal / vLen)
 	}
 
 	return mean
@@ -130,13 +138,13 @@ func getAction(action []byte) (interface{}, error) {
 	switch action[0] {
 	case 'I':
 		// insert
-		timestamp := binary.BigEndian.Uint32(action[1:5])
-		price := binary.BigEndian.Uint32(action[5:9])
+		timestamp := UnmarshalInt32(action[1:5])
+		price := UnmarshalInt32(action[5:9])
 		return PriceRecord{Timestamp: timestamp, Price: price}, nil
 	case 'Q':
 		// query
-		minTime := binary.BigEndian.Uint32(action[1:5])
-		maxTime := binary.BigEndian.Uint32(action[5:9])
+		minTime := UnmarshalInt32(action[1:5])
+		maxTime := UnmarshalInt32(action[5:9])
 		return PriceQuery{MinTime: minTime, MaxTime: maxTime}, nil
 	}
 
@@ -144,11 +152,24 @@ func getAction(action []byte) (interface{}, error) {
 }
 
 type PriceRecord struct {
-	Timestamp uint32
-	Price     uint32
+	Timestamp int32
+	Price     int32
 }
 
 type PriceQuery struct {
-	MinTime uint32
-	MaxTime uint32
+	MinTime int32
+	MaxTime int32
+}
+
+func MarshalInt32(v int32, b []byte) {
+	buf := bytes.NewBuffer(make([]byte, 0, 4))
+	binary.Write(buf, binary.BigEndian, v)
+	copy(b, buf.Bytes())
+}
+
+func UnmarshalInt32(b []byte) int32 {
+	var v int32
+	buf := bytes.NewReader(b)
+	binary.Read(buf, binary.BigEndian, &v)
+	return v
 }
