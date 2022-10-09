@@ -8,10 +8,10 @@ import (
 	"log"
 	"net"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 )
 
 const (
@@ -19,7 +19,10 @@ const (
 )
 
 var (
-	errInvalidUsername = errors.New("username should be between 1 and 16 alphanumeric characters")
+	errInvalidUsername    = errors.New("username should be between 1 and 16 alphanumeric characters")
+	errUniqueUsername     = errors.New("username already taken")
+	errChatMessageTooLong = errors.New("chat message too long, 1100 characters allowed")
+	isAlphanumeric        = regexp.MustCompile(`^[a-zA-Z0-9]{1,16}$`).MatchString
 )
 
 func main() {
@@ -66,17 +69,14 @@ func (r *ChatRoom) initMember(c net.Conn) (*Member, error) {
 	}
 	username = normalizeReadLine(username)
 
-	if len(username) > 16 || len(username) < 1 {
+	if !isAlphanumeric(username) {
 		return nil, errInvalidUsername
 	}
 
-	for _, r := range username {
-		if !(unicode.IsLetter(r) || unicode.IsNumber(r)) {
-			return nil, errInvalidUsername
-		}
+	if r.memberNameTaken(username) {
+		return nil, errUniqueUsername
 	}
 
-	// TODO: validate username as ASCI characters
 	u := &Member{}
 	u.input = make(chan Message, 1)
 	u.name = username
@@ -95,6 +95,13 @@ func newMemberNetwork(c net.Conn) *MemberNet {
 		w:    bufio.NewWriter(c),
 		r:    bufio.NewReader(c),
 	}
+}
+
+func (r *ChatRoom) memberNameTaken(name string) bool {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+	_, ok := r.members[name]
+	return ok
 }
 
 func (r *ChatRoom) registerMember(m *Member) {
@@ -143,7 +150,7 @@ func (m *Member) Send(msg Message) error {
 	if msg.excludeFrom {
 		return m.SendTxt(fmt.Sprintf("%s\n", msg.body))
 	} else {
-		return m.SendTxt(fmt.Sprintf("%s: %s\n", msg.from, msg.body))
+		return m.SendTxt(fmt.Sprintf("[%s] %s\n", msg.from, msg.body))
 	}
 }
 
@@ -152,6 +159,11 @@ func (m *Member) ReadMemberMessage() (*Message, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if len(txt) > 1100 {
+		return nil, errChatMessageTooLong
+	}
+
 	return &Message{from: m.name, body: normalizeReadLine(txt)}, nil
 }
 
@@ -226,8 +238,8 @@ func handleConnection(c net.Conn, r *ChatRoom) {
 	// read username
 	member, err := r.initMember(c)
 	if err != nil {
-		if errors.Is(err, errInvalidUsername) {
-			c.Write([]byte(errInvalidUsername.Error()))
+		if errors.Is(err, errInvalidUsername) || errors.Is(err, errUniqueUsername) {
+			c.Write([]byte(err.Error()))
 		} else {
 			log.Printf("member init failed: %v", err)
 		}
@@ -253,6 +265,12 @@ func (r *ChatRoom) readMember(m *Member) {
 		if err != nil {
 			if err == io.EOF {
 				log.Printf("Client closed connection")
+				r.publish(Message{
+					from:        m.name,
+					body:        fmt.Sprintf("* %s has left the room", m.name),
+					excludeFrom: true,
+				})
+				r.unregisterMember(m)
 				return
 			} else if opError, ok := err.(*net.OpError); ok {
 				if opError.Op == "abc" {

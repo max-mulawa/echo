@@ -46,3 +46,22 @@ Solution to [Problem 2](https://protohackers.com/problem/2)
 make build
 ./bin/means
 ```
+
+### chat server
+Chat servers allowing multiple clients to communicate.
+
+```bash
+make build
+./bin/chat
+```
+
+```bash
+nc localhost 8888
+max  #type and press enter
+#begin chat
+
+# another
+nc localhost 8888
+charlie95  #type and press enter
+#begin chat
+```
