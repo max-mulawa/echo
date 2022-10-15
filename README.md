@@ -65,3 +65,18 @@ nc localhost 8888
 charlie95  #type and press enter
 #begin chat
 ```
+
+### Key-value store
+
+```bash
+make build
+./bin/kvstore
+```
+
+```bash
+nc -u localhost 9999
+key1=val1 #type and press Ctrl+D to avoid sending new line character
+key1 #type and press Ctrl+D
+
+=>key1=val1 #returned
+```
