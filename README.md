@@ -49,6 +49,7 @@ make build
 
 ### chat server
 Chat servers allowing multiple clients to communicate.
+Solution to [Problem 3](https://protohackers.com/problem/3)
 
 ```bash
 make build
@@ -67,6 +68,9 @@ charlie95  #type and press enter
 ```
 
 ### Key-value store
+
+Key-value store over UDP 
+Solution to [Problem 4](https://protohackers.com/problem/4)
 
 ```bash
 make build
