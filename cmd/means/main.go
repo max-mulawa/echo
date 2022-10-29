@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	serverPort = 8888
+	serverPort = 8886
 )
 
 var (

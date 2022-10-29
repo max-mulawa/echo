@@ -84,3 +84,15 @@ key1 #type and press Ctrl+D
 
 =>key1=val1 #returned
 ```
+
+# Proxy
+
+Simple proxy server 
+Solution to [Problem 5](https://protohackers.com/problem/5)
+
+```bash
+make build
+./bin/proxy
+```
+
+see Chat server for interaction with proxy on port 8887
