@@ -7,17 +7,18 @@ import (
 	"net"
 	"os"
 	"regexp"
+	"strings"
 	"time"
 )
 
 const (
 	serverPort = 8887
 
-	// destinationHost = "chat.protohackers.com"
-	// destinationPort = 16963
+	destinationHost = "chat.protohackers.com"
+	destinationPort = 16963
 
-	destinationHost = "localhost"
-	destinationPort = 8888
+	// destinationHost = "localhost"
+	// destinationPort = 8888
 )
 
 func main() {
@@ -75,7 +76,7 @@ func WriteResponse(sconn net.Conn, response <-chan []byte, ctx context.Context, 
 		case <-ctx.Done():
 			return
 		case resp := <-response:
-			_, err := sconn.Write(resp)
+			_, err := sconn.Write(rewrite(resp))
 			if err != nil {
 				fmt.Println("failed on writing to source", err)
 				cancel()
@@ -128,7 +129,7 @@ func WriteRequest(conn net.Conn, request <-chan []byte, ctx context.Context, can
 		case <-ctx.Done():
 			return
 		case req := <-request:
-			_, err := conn.Write(req)
+			_, err := conn.Write(rewrite(req))
 			if err != nil {
 				fmt.Println("failed on write to destination", err)
 				cancel()
@@ -139,11 +140,38 @@ func WriteRequest(conn net.Conn, request <-chan []byte, ctx context.Context, can
 }
 
 var (
-	bogusCoinExp = regexp.MustCompile("(7[0-9a-zA-Z]{25,34})")
+	bogusCoinExp = regexp.MustCompile("7[0-9a-zA-Z]{25,34}")
+	tonyCoin     = []byte("7YWHMfk9JZe0LM0g1ZauHuiSxhI")
 )
 
 func rewrite(msg []byte) []byte {
 	txt := string(msg)
-	bogusCoinExp.FindStringSubmatchIndex(txt)
+	indexes := bogusCoinExp.FindAllStringSubmatchIndex(txt, -1)
+	if indexes == nil {
+		return msg
+	}
 
+	newmsg := []string{}
+	newIndx := 0
+	for _, indexTuple := range indexes {
+		startIndex := indexTuple[0]
+		endIndex := indexTuple[1]
+		if (startIndex == 0 || msg[startIndex-1] == ' ') && (msg[endIndex] == '\n' || msg[endIndex] == ' ') {
+			newmsg = append(newmsg, txt[newIndx:startIndex])
+			newmsg = append(newmsg, string(tonyCoin))
+			newIndx = endIndex
+		}
+	}
+
+	newmsg = append(newmsg, txt[newIndx:])
+
+	if len(newmsg) == 0 {
+		return msg
+	}
+
+	return []byte(strings.Join(newmsg, ""))
+
+	// return bogusCoinExp.ReplaceAllFunc(msg, func(b []byte) []byte {
+	// 	return tonyCoin
+	// })
 }
