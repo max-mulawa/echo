@@ -6,5 +6,6 @@ build:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ./bin/chat ./cmd/chat/main.go
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ./bin/kvstore ./cmd/kvstore/main.go
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ./bin/proxy ./cmd/proxy/main.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ./bin/speed ./cmd/speed/main.go
 test:
 	go test ./...
