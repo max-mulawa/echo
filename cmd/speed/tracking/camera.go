@@ -5,23 +5,22 @@ import (
 	"time"
 )
 
-type Camera struct {
-	road  uint16 // road number
-	mile  uint16 // relative position on the road
-	limit uint16 // in miles per hour
-}
-
 type IAmCameraMsg struct {
-	Camera
+	Road  uint16 // road number
+	Mile  uint16 // relative position on the road
+	Limit uint16 // in miles per hour
 }
 
 var IAmCameraMsgType messages.MsgType = 128 // 0x80
 
-type Plate string
-
-type Measurement struct {
-	plate     Plate
-	timestamp time.Time
+type MeasurementTimeMsg struct {
+	Plate     string
+	Timestamp time.Time
 }
 
-var MeasurementMsgType messages.MsgType = 32 //0x20
+var MeasurementTimeMsgType messages.MsgType = 32 //0x20
+
+type Measurement struct {
+	Device IAmCameraMsg
+	Time   MeasurementTimeMsg
+}

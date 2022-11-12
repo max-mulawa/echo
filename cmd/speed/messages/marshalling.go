@@ -8,12 +8,6 @@ import (
 	"time"
 )
 
-// var msgTypes map[MsgType]reflect.Type = map[MsgType]reflect.Type{
-// 	// ops.ErrorMsgType:            reflect.TypeOf(ops.ServerError{}),
-// 	// ops.HeartbeatRequestMsgType: reflect.TypeOf(ops.HeartbeatRequest{}),
-// 	// ops.HeartbeatMsgType:        reflect.TypeOf(ops.HearbeatSignal{}),
-// }
-
 type Decoder struct {
 	msgTypes map[MsgType]reflect.Type
 }
@@ -69,7 +63,6 @@ func (d *Decoder) Unmarshall(payload []byte) (interface{}, int, error) {
 					msg.Field(i).Set(reflect.ValueOf(time.Unix(int64(v), 0)))
 					offset += 4
 				}
-				// time.Time
 			case reflect.Slice:
 				switch msg.Field(i).Type() {
 				case reflect.TypeOf([]uint16{}):

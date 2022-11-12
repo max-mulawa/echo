@@ -14,15 +14,37 @@ func TestUnmarshallingString(t *testing.T) {
 		Msg string
 	}
 
-	decoder := messages.NewDecoder()
-	decoder.RegisterMsg(messages.MsgType(16), reflect.TypeOf(stringTest{}))
+	for _, tc := range []struct {
+		desc          string
+		payload       []byte
+		expected      string
+		bytesConsumed int
+	}{
+		{
+			desc:          "non empty string",
+			payload:       []byte{0x10, 0x03, 0x62, 0x61, 0x64},
+			expected:      "bad",
+			bytesConsumed: 5,
+		},
+		{
+			desc:          "empty string",
+			payload:       []byte{0x10, 0x0},
+			expected:      "",
+			bytesConsumed: 2,
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			decoder := messages.NewDecoder()
+			decoder.RegisterMsg(messages.MsgType(16), reflect.TypeOf(stringTest{}))
 
-	payload := []byte{0x10, 0x03, 0x62, 0x61, 0x64}
-	v, cnt, err := decoder.Unmarshall(payload)
-	require.NoError(t, err)
-	res := v.(stringTest)
-	require.Equal(t, "bad", res.Msg)
-	require.Equal(t, 5, cnt)
+			v, cnt, err := decoder.Unmarshall(tc.payload)
+			require.NoError(t, err)
+			res := v.(stringTest)
+			require.Equal(t, tc.expected, res.Msg)
+			require.Equal(t, tc.bytesConsumed, cnt)
+		})
+	}
+
 }
 
 func TestUnmarshallingSignedInts(t *testing.T) {

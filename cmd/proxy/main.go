@@ -170,8 +170,4 @@ func rewrite(msg []byte) []byte {
 	}
 
 	return []byte(strings.Join(newmsg, ""))
-
-	// return bogusCoinExp.ReplaceAllFunc(msg, func(b []byte) []byte {
-	// 	return tonyCoin
-	// })
 }

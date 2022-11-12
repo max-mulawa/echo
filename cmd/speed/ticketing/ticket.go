@@ -6,13 +6,13 @@ import (
 )
 
 type Ticket struct {
-	plate      string
-	road       RoadNum
-	mile1      uint16
-	timestamp1 time.Time
-	mile2      uint16
-	timestamp2 time.Time
-	speed      uint16
+	Plate      string
+	Road       uint16
+	Mile1      uint16
+	Timestamp1 time.Time
+	Mile2      uint16
+	Timestamp2 time.Time
+	Speed      uint16
 }
 
 var TicketMsgType messages.MsgType = 33 //0x21
