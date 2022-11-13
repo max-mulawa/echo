@@ -65,9 +65,10 @@ func (r *MeasurementsRegistry) onRegisterMeasurement(car *Car, road uint16, road
 			timestamp2 := roadMeasures[j].Time.Timestamp
 			distance := float64(mile2 - mile1)
 			duration := timestamp2.Sub(timestamp1)
+
 			if distance > 0 {
 				speed := distance / duration.Hours()
-				if speed > roadLimit {
+				if speed >= (roadLimit + 0.5) {
 					// publish offense
 					r.pub.Publish(Offense{
 						Plate:      car.Plate,

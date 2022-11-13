@@ -24,3 +24,13 @@ type Measurement struct {
 	Device IAmCameraMsg
 	Time   MeasurementTimeMsg
 }
+
+type Camera struct {
+	Metadata IAmCameraMsg
+}
+
+func NewCamera(m IAmCameraMsg) *Camera {
+	return &Camera{
+		Metadata: m,
+	}
+}

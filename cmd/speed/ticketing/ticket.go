@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-type Ticket struct {
+type TicketMsg struct {
 	Plate      string
 	Road       uint16
 	Mile1      uint16

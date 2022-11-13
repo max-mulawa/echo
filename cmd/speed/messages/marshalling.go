@@ -87,7 +87,7 @@ func (d *Decoder) Marshal(val interface{}) ([]byte, error) {
 	var msgType MsgType
 	var mt reflect.Type
 	for msgType, mt = range d.msgTypes {
-		if currentType.ConvertibleTo(mt) {
+		if currentType == mt {
 			break
 		}
 	}
