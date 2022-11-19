@@ -282,8 +282,6 @@ func TestSampleSession(t *testing.T) {
 	Write(t, camera2, append(registerCamera2, cam2Measurement...))
 	Write(t, dispatcher, registerDispatcher)
 
-	// time.Sleep(time.Second)
-
 	decoder := messages.NewDecoder()
 	decoder.RegisterMsg(ticketing.TicketMsgType, reflect.TypeOf(ticketing.TicketMsg{}))
 	reader := messages.NewReader(dispatcher, decoder)
@@ -296,6 +294,8 @@ func TestSampleSession(t *testing.T) {
 	require.Equal(t, uint16(9), ticket.Mile2)
 	require.Equal(t, time.Unix(45, 0), ticket.Timestamp2)
 	require.Equal(t, uint16(8000), ticket.Speed)
+
+	//time.Sleep(time.Minute)
 }
 
 // TODO: dispatcher responsible for multiple roads

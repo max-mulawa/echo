@@ -42,7 +42,7 @@ func (d *Dispatcher) Dispatch(t TicketMsg) error {
 	if err != nil {
 		return fmt.Errorf("dispatch sending payload failed: %w", err)
 	}
-	d.Tickets <- t
+	go func() { d.Tickets <- t }()
 	return nil
 }
 
@@ -115,7 +115,7 @@ func (rd *RoadDispatchers) dispatchInternal(d *Dispatcher, t TicketMsg) {
 		if err != nil {
 			fmt.Printf("failed to dispatch (road: %d) ticket (%v): %v\n", road, t, err)
 		} else {
-			fmt.Printf("dispatch ticket (road: %d) ticket (%v)\n", road, t)
+			fmt.Printf("ticket was dispatched (road: %d) ticket (%v)\n", road, t)
 		}
 	} else {
 		fmt.Printf("cannot dispatch ticket as car already fined on that day (road: %d) from the queue (%v)\n", road, t)

@@ -147,7 +147,7 @@ func writeServerError(conn net.Conn, decoder *messages.Decoder, message string) 
 
 func (d *DispatcherHanlder) Handle(msg interface{}) error {
 	for t := range d.dispatcher.Tickets {
-		fmt.Println("ticket dispatched", t)
+		fmt.Println("handler informed that ticket dispatched", t)
 	}
 	return nil
 }
