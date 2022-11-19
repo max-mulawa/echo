@@ -1,7 +1,9 @@
 package traffic
 
 import (
+	"fmt"
 	"max-mulawa/echo/cmd/speed/tracking"
+	"regexp"
 	"sort"
 	"sync"
 )
@@ -17,6 +19,8 @@ type Car struct {
 	lock    sync.Mutex
 }
 
+var carPlateRegEx = regexp.MustCompile("^[A-Z0-9]*$")
+
 func NewMeasurementsRegistry(pub FeedPublisher) *MeasurementsRegistry {
 	return &MeasurementsRegistry{
 		cars: sync.Map{},
@@ -24,9 +28,14 @@ func NewMeasurementsRegistry(pub FeedPublisher) *MeasurementsRegistry {
 	}
 }
 
-func (r *MeasurementsRegistry) Register(m tracking.Measurement) {
+func (r *MeasurementsRegistry) Register(m tracking.Measurement) error {
 	plate := m.Time.Plate
 	road := m.Device.Road
+
+	if !carPlateRegEx.Match([]byte(plate)) {
+		return fmt.Errorf("invalid format of car plate %q", plate)
+	}
+
 	car, _ := r.cars.LoadOrStore(plate, &Car{
 		Plate:   plate,
 		PerRoad: map[uint16][]tracking.Measurement{},
@@ -34,11 +43,14 @@ func (r *MeasurementsRegistry) Register(m tracking.Measurement) {
 	})
 
 	go car.(*Car).registerMeasurement(r, road, m)
+	return nil
 }
 
 func (c *Car) registerMeasurement(r *MeasurementsRegistry, road uint16, m tracking.Measurement) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
+	fmt.Printf("registering measurement for car (%s) on road (%d) at (%s), camera (%d , %d) \n", m.Time.Plate, road, m.Time.Timestamp, road, m.Device.Mile)
 
 	c.PerRoad[road] = append(c.PerRoad[road], m)
 	roadMeasures := c.PerRoad[road]
@@ -70,7 +82,7 @@ func (r *MeasurementsRegistry) onRegisterMeasurement(car *Car, road uint16, road
 				speed := distance / duration.Hours()
 				if speed >= (roadLimit + 0.5) {
 					// publish offense
-					r.pub.Publish(Offense{
+					o := Offense{
 						Plate:      car.Plate,
 						Road:       road,
 						Mile1:      mile1,
@@ -78,7 +90,8 @@ func (r *MeasurementsRegistry) onRegisterMeasurement(car *Car, road uint16, road
 						Mile2:      mile2,
 						Timestamp2: timestamp2,
 						Speed:      uint16(speed) * 100,
-					})
+					}
+					r.pub.Publish(o)
 				}
 			}
 		}

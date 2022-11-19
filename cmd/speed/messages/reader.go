@@ -1,6 +1,7 @@
 package messages
 
 import (
+	"encoding/hex"
 	"fmt"
 	"io"
 )
@@ -26,11 +27,12 @@ func (r *Reader) GetMessages() <-chan interface{} {
 	go func() {
 		defer close(messages)
 		bufSize := 1024
+		incomplete := []byte{}
 
 		for {
 			buffer := make([]byte, bufSize)
 			start := 0
-			count, err := r.conn.Read(buffer)
+			readCnt, err := r.conn.Read(buffer)
 			if err != nil {
 				if err != io.EOF {
 					messages <- fmt.Errorf("read error: %w", err)
@@ -40,14 +42,21 @@ func (r *Reader) GetMessages() <-chan interface{} {
 				break
 			}
 
-			for start < count {
-				payload := buffer[start:count]
+			payloadBuf := append(incomplete, buffer[start:readCnt]...)
+			payloadBufCnt := len(payloadBuf)
+			incomplete = []byte{}
+
+			for start < payloadBufCnt {
+				payload := payloadBuf[start:]
 				msg, cntBytes, err := r.decoder.Unmarshall(payload)
-				if err != nil {
+				if err == ErrIncompletePayload {
+					incomplete = payload
+					break
+				} else if err != nil {
 					messages <- fmt.Errorf("failure during unmarshalling of message: %w", err)
 					return
 				}
-				fmt.Printf("message size: %d\n", cntBytes)
+				fmt.Printf("message size: %d, payload: %+v\n", cntBytes, hex.EncodeToString(payload[:cntBytes]))
 				start += cntBytes
 				messages <- msg
 			}

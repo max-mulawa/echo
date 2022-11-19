@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"max-mulawa/echo/cmd/speed/messages"
 	"max-mulawa/echo/cmd/speed/ops"
 	"max-mulawa/echo/cmd/speed/ticketing"
@@ -10,6 +11,7 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"strings"
 	"time"
 )
 
@@ -76,11 +78,32 @@ func handleConnection(conn net.Conn) {
 	decoder.RegisterMsg(ticketing.IAmDispatcherMsgType, reflect.TypeOf(ticketing.IAmDispatcherMsg{}))
 	decoder.RegisterMsg(ticketing.TicketMsgType, reflect.TypeOf(ticketing.TicketMsg{}))
 
+	decoder.RegisterMsg(ops.HeartbeatRequestMsgType, reflect.TypeOf(ops.HeartbeatRequest{}))
+	decoder.RegisterMsg(ops.HeartbeatMsgType, reflect.TypeOf(ops.HearbeatSignal{}))
+
 	decoder.RegisterMsg(ops.ErrorMsgType, reflect.TypeOf(ops.ServerError{}))
 
 	reader := messages.NewReader(conn, decoder)
 	var msgHanlder Handler
+	var hearbeatHandler Handler
+	var dispatcher *ticketing.Dispatcher
+	defer func() {
+		if dispatcher != nil {
+			dispatchers.Unregister(dispatcher)
+		}
+	}()
 	for msg := range reader.GetMessages() {
+		if hearbeatReq, ok := msg.(ops.HeartbeatRequest); ok {
+			if hearbeatHandler == nil {
+				hearbeatHandler = NewHeartbeatHandler(conn, decoder)
+				go hearbeatHandler.Handle(hearbeatReq)
+				continue
+			} else {
+				writeServerError(conn, decoder, "double heartbeat request")
+				return
+			}
+		}
+
 		if msgHanlder != nil {
 			err := msgHanlder.Handle(msg)
 			if err != nil {
@@ -92,11 +115,21 @@ func handleConnection(conn net.Conn) {
 
 		switch m := msg.(type) {
 		case tracking.IAmCameraMsg:
+			fmt.Println("registering camera", m)
 			msgHanlder = NewCameraHanlder(m, measurementsReg, decoder)
 		case ticketing.IAmDispatcherMsg:
-			msgHanlder = NewDispatcherHandler(conn, m, dispatchers, decoder)
+			fmt.Printf("registering dispatcher for roads: %v\n", m.Roads)
+			dispatcher = ticketing.NewDispatcher(m, conn, decoder)
+			dispatchers.Register(dispatcher)
+			msgHanlder = NewDispatcherHandler(dispatcher)
 		case error:
-			fmt.Println("error occured", m)
+			fmt.Println("error occured on message dispatching: ", m)
+			if strings.Contains(m.Error(), "not registered") {
+				writeServerError(conn, decoder, "unknown message")
+			} else if m != messages.ErrClientClosed {
+				writeServerError(conn, decoder, fmt.Sprintf("failuire occured in dispatching messages: %v", m))
+			}
+
 			return
 		default:
 			writeServerError(conn, decoder, fmt.Sprintf("message out of scope: %v", msg))
@@ -133,8 +166,10 @@ func (c *CameraHanlder) Handle(msg interface{}) error {
 	cam := c.camera.Metadata
 	switch message := msg.(type) {
 	case tracking.MeasurementTimeMsg:
-		c.registry.Register(tracking.Measurement{Device: cam, Time: message})
-		/// TODO: heartbeat message
+		err := c.registry.Register(tracking.Measurement{Device: cam, Time: message})
+		if err != nil {
+			return fmt.Errorf("measurement registration failed: %w", err)
+		}
 	case error:
 		if msg == messages.ErrClientClosed {
 			fmt.Printf("camera (r: %d, m: %d): %s\n", cam.Road, cam.Mile, msg)
@@ -142,7 +177,7 @@ func (c *CameraHanlder) Handle(msg interface{}) error {
 		}
 		return fmt.Errorf("incorrect message send to camera: %w", message)
 	default:
-		return fmt.Errorf("incorrect order of messages send to camera: %v", message)
+		return fmt.Errorf("incorrect order of messages send from camera: %v", message)
 	}
 	return nil
 }
@@ -159,15 +194,49 @@ type DispatcherHanlder struct {
 	dispatcher *ticketing.Dispatcher
 }
 
-func NewDispatcherHandler(conn net.Conn, m ticketing.IAmDispatcherMsg, dispatchers *ticketing.RoadDispatchers, decoder *messages.Decoder) *DispatcherHanlder {
-	dispatcher := ticketing.NewDispatcher(m, conn, decoder)
-	dispatchers.Register(dispatcher)
-
-	//TODO: unregister dispatcher
-
+func NewDispatcherHandler(dispatcher *ticketing.Dispatcher) *DispatcherHanlder {
 	return &DispatcherHanlder{
 		dispatcher: dispatcher,
 	}
+}
+
+type HeartbeatHandler struct {
+	conn    net.Conn
+	decoder *messages.Decoder
+}
+
+func NewHeartbeatHandler(conn net.Conn, decoder *messages.Decoder) *HeartbeatHandler {
+	return &HeartbeatHandler{
+		conn:    conn,
+		decoder: decoder,
+	}
+}
+
+func (h *HeartbeatHandler) Handle(msg interface{}) error {
+	hearbeatReq := msg.(ops.HeartbeatRequest)
+
+	if hearbeatReq.Interval == 0 {
+		return nil
+	}
+
+	for range time.Tick(time.Duration(hearbeatReq.Interval) * 100 * time.Millisecond) {
+		signal := ops.HearbeatSignal{}
+		payload, err := h.decoder.Marshal(signal)
+		if err != nil {
+			return fmt.Errorf("failed to marshal heartbeat signal: %w", err)
+		}
+		_, err = h.conn.Write(payload)
+		if err != nil {
+			if err != io.EOF {
+				return fmt.Errorf("sending heartbeat signal failed: %w", err)
+			} else {
+				fmt.Println("disconneted heartbeat client")
+				return nil
+			}
+		}
+	}
+
+	return nil
 }
 
 // Accept connections

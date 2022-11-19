@@ -4,8 +4,15 @@ https://protohackers.com
 
 ## Troubleshooting
 
+Record traffic on remote server
 ```bash
 sudo tcpdump 'port 8888' -w /tmp/dump-external-prime.dmp
+scp ??@??:/tmp/dump-external-prime.dmp dump-external-prime.dmp
+```
+
+Run selected test 
+```bash
+go test --timeout 3s -run SampleSession
 ```
 
 ## Echo

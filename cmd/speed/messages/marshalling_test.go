@@ -148,3 +148,24 @@ func TestMarshallingComplex(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, payload, resPayload)
 }
+
+func TestMarshallingIncompletePayload(t *testing.T) {
+	type uintTest struct {
+		Roads []uint16
+	}
+
+	decoder := messages.NewDecoder()
+	decoder.RegisterMsg(messages.MsgType(16), reflect.TypeOf(uintTest{}))
+
+	payload := []byte{
+		0x10,       // message type
+		0x02,       // slice uint16[2]
+		0x00, 0x42, //[0]=>66,
+		0x01, 0x70, //[1]=>368,
+	}
+	v, cnt, err := decoder.Unmarshall(payload[:2])
+	require.Nil(t, v)
+	require.Error(t, err)
+	require.Equal(t, messages.ErrIncompletePayload, err)
+	require.Equal(t, 0, cnt)
+}

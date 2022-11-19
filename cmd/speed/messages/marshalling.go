@@ -8,6 +8,10 @@ import (
 	"time"
 )
 
+var (
+	ErrIncompletePayload = fmt.Errorf("incomplete payload")
+)
+
 type Decoder struct {
 	msgTypes map[MsgType]reflect.Type
 }
@@ -17,7 +21,8 @@ func NewDecoder() *Decoder {
 }
 
 func (d *Decoder) Unmarshall(payload []byte) (interface{}, int, error) {
-	if len(payload) == 0 {
+	dataSize := len(payload)
+	if dataSize == 0 {
 		return nil, 0, fmt.Errorf("empty payload")
 	}
 
@@ -53,7 +58,11 @@ func (d *Decoder) Unmarshall(payload []byte) (interface{}, int, error) {
 				strLen := uint8(payload[offset])
 				offset++
 				bytesCnt := int(strLen)
-				msg.Field(i).SetString(string(payload[offset:(offset + bytesCnt)]))
+				sliceSize := offset + bytesCnt
+				if sliceSize > dataSize {
+					return nil, 0, ErrIncompletePayload
+				}
+				msg.Field(i).SetString(string(payload[offset:sliceSize]))
 				offset += bytesCnt
 			case reflect.Struct:
 				switch msg.Field(i).Type() {
@@ -70,7 +79,11 @@ func (d *Decoder) Unmarshall(payload []byte) (interface{}, int, error) {
 					offset++
 					var v = make([]uint16, arrLen)
 					bytesCnt := int(arrLen * 2)
-					fromBigEndian(v, payload[offset:(offset+bytesCnt)])
+					sliceSize := offset + bytesCnt
+					if sliceSize > dataSize {
+						return nil, 0, ErrIncompletePayload
+					}
+					fromBigEndian(v, payload[offset:sliceSize])
 					msg.Field(i).Set(reflect.ValueOf(v))
 					offset += bytesCnt
 				}

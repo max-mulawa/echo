@@ -1,6 +1,7 @@
 package traffic
 
 import (
+	"fmt"
 	"sync"
 	"time"
 )
@@ -35,6 +36,7 @@ func NewOffenseFeed(sub chan<- Offense) *OffenseFeed {
 
 func (p *OffenseFeed) Publish(o Offense) {
 	if _, exists := p.published.LoadOrStore(o, true); !exists {
+		fmt.Printf("publishing offense: %v\n", o)
 		p.Sub <- o
 	}
 }
