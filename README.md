@@ -7,7 +7,12 @@ https://protohackers.com
 Record traffic on remote server
 ```bash
 sudo tcpdump 'port 8888' -w /tmp/dump-external-prime.dmp
-scp ??@??:/tmp/dump-external-prime.dmp dump-external-prime.dmp
+scp username@host:/tmp/dump-external-prime.dmp dump-external-prime.dmp
+```
+
+Copy binary to server
+```bash
+make && scp bin/speed username@host:/app/speed/
 ```
 
 Run selected test 
@@ -103,3 +108,11 @@ make build
 ```
 
 see Chat server for interaction with proxy on port 8887
+
+# Speed 
+
+Solution to [Problem 6](https://protohackers.com/problem/6)
+```bash
+make build
+rm -rf speed.log && ./bin/speed > speed.log
+```

@@ -146,10 +146,16 @@ func writeServerError(conn net.Conn, decoder *messages.Decoder, message string) 
 }
 
 func (d *DispatcherHanlder) Handle(msg interface{}) error {
-	for t := range d.dispatcher.Tickets {
-		fmt.Println("handler informed that ticket dispatched", t)
+	switch message := msg.(type) {
+	case error:
+		if msg == messages.ErrClientClosed {
+			fmt.Printf("dispatcher: %v\n", msg)
+			return nil
+		}
+		return fmt.Errorf("incorrect message send to dispatcher: %w", message)
+	default:
+		return fmt.Errorf("incorrect order of messages send from dispatcher: %v", message)
 	}
-	return nil
 }
 
 type Handler interface {
@@ -195,9 +201,17 @@ type DispatcherHanlder struct {
 }
 
 func NewDispatcherHandler(dispatcher *ticketing.Dispatcher) *DispatcherHanlder {
-	return &DispatcherHanlder{
+	d := &DispatcherHanlder{
 		dispatcher: dispatcher,
 	}
+
+	go func() {
+		for t := range d.dispatcher.Tickets {
+			fmt.Println("handler informed that ticket dispatched", t)
+		}
+	}()
+
+	return d
 }
 
 type HeartbeatHandler struct {

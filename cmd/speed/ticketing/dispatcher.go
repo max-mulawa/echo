@@ -58,7 +58,7 @@ func NewRoadDispatchers() *RoadDispatchers {
 		lock:        sync.Mutex{},
 		dispatchers: make(map[uint16][]*Dispatcher),
 		ticketQueue: map[uint16][]TicketMsg{},
-		ledger:      &TicketLedger{},
+		ledger:      NewTicketLedger(),
 	}
 }
 

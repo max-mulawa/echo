@@ -2,6 +2,7 @@ package traffic
 
 import (
 	"fmt"
+	"math"
 	"max-mulawa/echo/cmd/speed/tracking"
 	"regexp"
 	"sort"
@@ -73,14 +74,16 @@ func (r *MeasurementsRegistry) onRegisterMeasurement(car *Car, road uint16, road
 		for j := i + 1; j < len(roadMeasures); j++ {
 			mile1 := roadMeasures[i].Device.Mile
 			timestamp1 := roadMeasures[i].Time.Timestamp
+
 			mile2 := roadMeasures[j].Device.Mile
 			timestamp2 := roadMeasures[j].Time.Timestamp
-			distance := float64(mile2 - mile1)
+
+			distanceMiles := math.Abs(float64(int16(mile2) - int16(mile1)))
 			duration := timestamp2.Sub(timestamp1)
 
-			if distance > 0 {
-				speed := distance / duration.Hours()
-				if speed >= (roadLimit + 0.5) {
+			if distanceMiles > 0 {
+				speedMph := distanceMiles / duration.Hours()
+				if speedMph >= (roadLimit + 0.5) {
 					// publish offense
 					o := Offense{
 						Plate:      car.Plate,
@@ -89,7 +92,7 @@ func (r *MeasurementsRegistry) onRegisterMeasurement(car *Car, road uint16, road
 						Timestamp1: timestamp1,
 						Mile2:      mile2,
 						Timestamp2: timestamp2,
-						Speed:      uint16(speed) * 100,
+						Speed:      uint16(speedMph * 100),
 					}
 					r.pub.Publish(o)
 				}

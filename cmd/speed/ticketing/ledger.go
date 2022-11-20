@@ -11,7 +11,15 @@ type TicketEntry struct {
 }
 
 type TicketLedger struct {
-	store sync.Map
+	store map[TicketEntry]bool
+	lock  sync.Mutex
+}
+
+func NewTicketLedger() *TicketLedger {
+	return &TicketLedger{
+		store: make(map[TicketEntry]bool),
+		lock:  sync.Mutex{},
+	}
 }
 
 func (l *TicketLedger) Add(t TicketMsg) bool {
@@ -25,20 +33,31 @@ func (l *TicketLedger) Add(t TicketMsg) bool {
 		days = append(days, endDay)
 	}
 
-	added := false
+	l.lock.Lock()
+	defer l.lock.Unlock()
+
+	entries := make(map[TicketEntry]bool)
 	for _, day := range days {
 		entry := TicketEntry{
 			Plate: t.Plate,
 			Day:   day,
 		}
-		_, existsInLedger := l.store.LoadOrStore(entry, true)
+		_, existsInLedger := l.store[entry]
 		if !existsInLedger {
-			added = true
+			entries[entry] = true
 			fmt.Println("ticket added to ledger ", entry)
 		} else {
+			entries = make(map[TicketEntry]bool)
 			fmt.Println("ticket already stored in the ledger ", entry)
+			break
 		}
 	}
 
-	return added
+	if len(entries) > 0 {
+		for k, v := range entries {
+			l.store[k] = v
+		}
+	}
+
+	return len(entries) > 0
 }

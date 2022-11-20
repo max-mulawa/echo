@@ -80,6 +80,33 @@ func TestRegisterCameraTwice(t *testing.T) {
 	require.Equal(t, io.EOF, err)
 }
 
+func TestRegisterDispatcherTwice(t *testing.T) {
+	camera := Connect(t)
+	defer camera.Close()
+
+	decoder := messages.NewDecoder()
+	decoder.RegisterMsg(ticketing.IAmDispatcherMsgType, reflect.TypeOf(ticketing.IAmDispatcherMsg{}))
+	decoder.RegisterMsg(ops.ErrorMsgType, reflect.TypeOf(ops.ServerError{}))
+
+	payload, err := decoder.Marshal(ticketing.IAmDispatcherMsg{
+		Roads: []uint16{126},
+	})
+	require.NoError(t, err)
+
+	Write(t, camera, payload)
+	Write(t, camera, payload)
+
+	reader := messages.NewReader(camera, decoder)
+	msgs := reader.GetMessages()
+	srvErr := (<-msgs).(ops.ServerError)
+	require.Contains(t, srvErr.Msg, "dispatcher")
+	require.Contains(t, srvErr.Msg, "incorrect order")
+
+	buf := make([]byte, 1024)
+	_, err = camera.Read(buf)
+	require.Equal(t, io.EOF, err)
+}
+
 func TestRegisterCameraSendMeasurementsAndWaitForTicket(t *testing.T) {
 	carPlate := "X1334"
 	road := uint16(0)
@@ -303,6 +330,7 @@ func TestSampleSession(t *testing.T) {
 // TODO: disconnected dispatcher
 // TODO: Only 1 ticket per car per day
 // TODO: Observation spanning 2 days covers tickets in both days.
+// TODO: Car moving from higher to lower distances positioned cameras on the road
 
 func Connect(t *testing.T) net.Conn {
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", "localhost", serverPort))
